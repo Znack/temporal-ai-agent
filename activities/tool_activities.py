@@ -170,7 +170,7 @@ class ToolActivities:
                     "next": "question",
                     "response": "[your reason here and a response to get the user back on track with the agent goal]"
                 }}
-                If validationResult is true (the prompt makes sense), return an empty dict as its value {{}}"
+                If validationResult is true (the prompt makes sense), return an empty dict as its value {{}}
             """
 
         # Call the LLM with the validation prompt
@@ -210,31 +210,29 @@ class ToolActivities:
             raise
 
     def prompt_llm_openai(self, input: ToolPromptInput) -> dict:
+        # Ensure OpenAI client exists, configure Helicone base URL if tracing
         if not self.openai_client:
             api_key = os.environ.get("OPENAI_API_KEY")
             if not api_key:
                 raise ValueError(
                     "OPENAI_API_KEY is not set in the environment variables but LLM_PROVIDER is 'openai'"
                 )
-            self.openai_client = OpenAI(api_key=api_key)
-            print("Initialized OpenAI client on demand")
+            init_args = {"api_key": api_key}
+            helicone_key = os.environ.get("HELICONE_API_KEY")
+            if helicone_key:
+                init_args["base_url"] = "https://oai.helicone.ai/v1"
+            self.openai_client = OpenAI(**init_args)
+            print(
+                "Initialized OpenAI client"
+                + (" with Helicone base_url" if helicone_key else "")
+            )
 
-        messages = [
-            {
-                "role": "system",
-                "content": input.context_instructions
-                + ". The current date is "
-                + datetime.now().strftime("%B %d, %Y"),
-            },
-            {
-                "role": "user",
-                "content": input.prompt,
-            },
-        ]
-
-        chat_completion = self.openai_client.chat.completions.create(
-            model="gpt-4o", messages=messages  # was gpt-4-0613
-        )
+        messages = self._build_messages(input)
+        helicone_headers = self._build_oai_helicone_headers()
+        call_args = {"model": "gpt-4o", "messages": messages}
+        if helicone_headers:
+            call_args["extra_headers"] = helicone_headers
+        chat_completion = self.openai_client.chat.completions.create(**call_args)
 
         response_content = chat_completion.choices[0].message.content
         print(f"ChatGPT response: {response_content}")
@@ -243,6 +241,31 @@ class ToolActivities:
         response_content = self.sanitize_json_response(response_content)
 
         return self.parse_json_response(response_content)
+
+    def _build_oai_helicone_headers(self) -> dict:
+        """Return Helicone tracing headers if API key is set."""
+        key = os.getenv("HELICONE_API_KEY")
+        if not key:
+            return {}
+        info = activity.info()
+        return {
+            "Helicone-Auth": f"Bearer {key}",
+            "Helicone-Session-Id": info.workflow_run_id,
+            "Helicone-Session-Path": f"/{info.workflow_id}/{info.activity_type}",
+            "Helicone-Session-Name": info.workflow_id,
+        }
+
+    def _build_messages(self, input: ToolPromptInput) -> list[dict]:
+        """Construct system and user messages for LLM prompts."""
+        return [
+            {
+                "role": "system",
+                "content": input.context_instructions
+                + ". The current date is "
+                + datetime.now().strftime("%B %d, %Y"),
+            },
+            {"role": "user", "content": input.prompt},
+        ]
 
     def prompt_llm_ollama(self, input: ToolPromptInput) -> dict:
         # If not yet initialized, try to do so now (this is a backup if warm_up_ollama wasn't called or failed)
