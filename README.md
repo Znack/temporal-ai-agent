@@ -133,12 +133,16 @@ See the [Temporal documentation](https://learn.temporal.io/getting_started/pytho
   ```bash
   docker compose up -d
   # quick rebuild without infra:
-  docker compose up -d --no-deps --build api train-api worker frontend
+  docker compose up -d --no-deps --build api train-api worker train-dotnet-worker frontend
   ```
 - To run **production** mode (ignore dev overrides):
   ```bash
   docker compose -f docker-compose.yml up -d
   ```
+
+#### **.NET train-dotnet-worker hot-reload/watch mode:**
+> - Uncomment `volumes` and `command` in `docker-compose.override.yml`.
+> - Build the DLL locally before starting the container (or use `dotnet watch run`).
 
 ### Python Backend
 Requires [Poetry](https://python-poetry.org/) to manage dependencies.

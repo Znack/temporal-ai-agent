@@ -98,6 +98,18 @@ services:
     networks:
       - temporal-network
 
+  train-dotnet-worker:
+    build:
+      context: ./enterprise
+      dockerfile: Dockerfile
+    container_name: temporal-train-dotnet-worker
+    depends_on:
+      - temporal
+    networks:
+      - temporal-network
+    environment:
+      - TEMPORAL_ADDRESS=temporal:7233
+
   frontend:
     image: node:18-alpine
     container_name: temporal-ai-agent-frontend
